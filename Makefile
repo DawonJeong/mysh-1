@@ -1,14 +1,14 @@
 # For implementation
 CC=gcc -std=c99
 CFLAGS=-I./src -I./include
-LIB=
-OBJ=./src/utils.o ./src/commands.o ./src/built_in.o
+LIB=-lpthread
+OBJ=./src/utils.o ./src/commands.o ./src/built_in.o ./src/signal_handlers.o
 
 %.o: %.c $(DEPS)
 	$(CC) -c -o $@ $< $(CFLAGS)
 
 mysh: $(OBJ)
-	$(CC) -o $@ $^ ./src/main.c $(CFLAGS)
+	$(CC) -o $@ $^ ./src/main.c $(CFLAGS) $(LIB)
 
 # For testing
 CXX=g++ -std=c++11
@@ -19,7 +19,7 @@ TESTING_EXE=mysh-test
 
 test: $(OBJ)
 	$(CXX) $(TESTING_FLAGS) -o $(TESTING_EXE) $(TESTING_SRC) $(OBJ) $(TESTING_LIB)
-	./$(TESTING_EXE)
+	./$(TESTING_EXE) $(LIB)
 
 clean:
 	rm -f $(TESTING_EXE) $(OBJ) mysh ./src/main.o

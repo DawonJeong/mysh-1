@@ -1,10 +1,14 @@
+#define _POSIX_SOURCE
 #include <stdio.h>
 #include <string.h>
+#include <termios.h>
 
 #include <sys/types.h>
+#include <sys/wait.h>
 #include <sys/stat.h>
 #include <unistd.h>
 #include <linux/limits.h>
+#include <signal.h>
 
 #include "built_in.h"
 
@@ -37,7 +41,13 @@ int do_fg(int argc, char** argv) {
     return -1;
 
   // TODO: Fill this.
-
+	
+	if(setpgid(getpid(),0)!=0)
+		perror("setpgid() error");
+	else{
+		printf("%d running",getpid());
+		return 3;
+	}
   return 0;
 }
 
