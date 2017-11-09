@@ -1,6 +1,12 @@
-#include <stdio.h>
-#include <sys/types.h>
+#define _POSIX_SOURCE
+#define SIGNAL_H_
 #include <signal.h>
+#include <stdio.h>
+#include <unistd.h>
+#include <termios.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+//#include <bits/sigaction.h>
 #include <stdlib.h>
 
 
@@ -8,9 +14,7 @@
 
 void catch_sigint(int signalNo)
 {
-	signal(SIGINT, catch_sigint);
-	printf("Can't be terminated using Ctrl+C\n");
-	fflush(stdout);
+	
 }
 
 void catch_sigtstp(int signalNo)
