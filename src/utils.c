@@ -55,6 +55,7 @@ void parse_single_command(const char* command,
 
   *argc = ti;
 
+
   if (*argc == 0) {
     *argc = 1;
     (*argv)[0] = (char*)malloc(1);

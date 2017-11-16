@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <termios.h>
+#include <stdlib.h>
 
 #include <sys/types.h>
 #include <sys/wait.h>
@@ -16,8 +17,15 @@ int do_cd(int argc, char** argv) {
   if (!validate_cd_argv(argc, argv))
     return -1;
 
-  if (chdir(argv[1]) == -1)
-    return -1;
+	//char path[256]=" ";
+
+//	strcpy(path,argv[1]);
+
+//	if(strcmp(path,"~")==0)
+//		chdir(getenv("HOME"));
+		
+	  if (chdir(argv[1]) == -1)
+   		 return -1;
 
   return 0;
 }
@@ -46,7 +54,6 @@ int do_fg(int argc, char** argv) {
 		perror("setpgid() error");
 	else{
 		printf("%d running",getpid());
-		return 3;
 	}
   return 0;
 }
