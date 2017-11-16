@@ -10,6 +10,7 @@
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <sys/un.h>
+#include <fcntl.h>
 #include <sys/wait.h>
 #include <termios.h>
 
@@ -20,9 +21,10 @@
 #define SOCK_PATH "tpf_unix_sock.server"
 #define SERVER_PATH "tpf_unix_sock.server"
 #define CLIENT_PATH "tpf_unix_sock.client"
-#define DATA "Hello from client"
+//#define DATA "Hello from client"
 
-void *serversocket(void*);
+
+void *clientsocket(void*a);
 
 
 static struct built_in_command built_in_commands[] = {
@@ -78,89 +80,108 @@ int evaluate_command(int n_commands, struct single_command (*commands)[512])
 		}else if(strcmp(com->argv[0],"")==0){
 			return 0;
 		}else if(built_in_pos == -1){
-			//pid_t pid = fork();
-			// n_commands = 2 --> pipe!!
-			 int pid = fork();
-			 
-			if(n_commands == 2){
-			//	pid_t pid2= fork();
-			//calling server using pthread
-				int pid2=fork();
-				char buff[256];
-				int status;
-				 pthread_t thread[1];
-				if(pid2 ==0 ){
-					printf("pid2==0\n");
+		//	pid_t pid = fork();
+			int pid = fork();
+
+			if(n_commands >= 2){
+				struct single_command* com2 = (*commands)+1;
 				
-				pthread_create(&thread[0],NULL,&serversocket,NULL);
-			//	int r = pthread_join(thread[0],(void**)&buff);
-				
-				int client_sock, rc, len;
-				struct sockaddr_un server_sockaddr;
-				struct sockaddr_un client_sockaddr;
+				if(pid != 0){
+					int server_sock, client_sock, len, rc;
+					int bytes_rec=0;
+					
+					struct sockaddr_un server_sockaddr;
+					struct sockaddr_un client_sockaddr;
+
 					char buf[256];
-					memset(&server_sockaddr,0,sizeof(struct sockaddr_un));
-					memset(&client_sockaddr,0,sizeof(struct sockaddr_un));
 
-					client_sock=socket(AF_UNIX,SOCK_STREAM,0);
-					if(client_sock==-1){
-						printf("SOCKET ERROR\n");
+					int backlog = 10;
+
+					memset(&server_sockaddr, 0, sizeof(struct sockaddr_un));
+					memset(&client_sockaddr, 0, sizeof(struct sockaddr_un));
+					memset(buf,0,256);
+
+					server_sock = socket(AF_UNIX, SOCK_STREAM, 0);
+					if(server_sock == -1){
+					//	printf("SOCK ERROR\n");
 						exit(1);
-					} else {printf( "cleint socket success\n"); }
+					}
 
-					client_sockaddr.sun_family = AF_UNIX;
-					strcpy(client_sockaddr.sun_path, CLIENT_PATH);
-					len=sizeof(client_sockaddr);
+					server_sockaddr.sun_family = AF_UNIX;
+					strcpy(server_sockaddr.sun_path, SOCK_PATH);
+					len = sizeof(server_sockaddr);
 
-					unlink(CLIENT_PATH);
-					rc = bind(client_sock, (struct sockaddr*)&client_sockaddr, len);
-					if(rc == -1)
-					{
-						printf("BIND ERROR\n");
+					unlink(SOCK_PATH);
+					rc = bind(server_sock, (struct sockaddr*)&server_sockaddr,len);
+					if(rc == -1){
+					//	printf("SERVER BIND ERRPR\n");
+						close(server_sock);
+						exit(1);
+					}
+
+					rc = listen(server_sock, backlog);
+					if( rc == -1){
+					//	printf("LISTEN ERROR\n");
+						close(server_sock);
+						exit(1);
+					}
+					
+				//	printf("socket listening...\n");
+					
+					//pid_t pid2 = fork();
+					//int pid2 = fork();
+					pthread_t thread[1];
+					//if(pid2 != 0){
+						char bu[256];
+					//	pthread_t thread[1];
+						pthread_create(&thread[0],NULL,&clientsocket,NULL);
+						int r = pthread_join(thread[0],(void**)&bu);
+						
+					//}
+					
+						
+					client_sock = accept(server_sock, (struct sockaddr *)&client_sockaddr, &len);
+					if(client_sock == -1){
+					//	printf("ACCEPT ERROR\n");
+						close(server_sock);
 						close(client_sock);
 						exit(1);
-					} else {printf("client bind success\n");}
-						
-					int r = pthread_join(thread[0],(void**)&buf);
-					server_sockaddr.sun_family = AF_UNIX;
-					strcpy(server_sockaddr.sun_path, SERVER_PATH);
-		
-		rc = connect(client_sock, (struct sockaddr*)&server_sockaddr,len);
-					if(rc== -1)
-					{
-						printf("CLIENT CONNECT ERROR\n");
-						exit(1);
-					}else { printf("client connection success\n");}
-	
-					strcpy(buf,DATA);
-					printf("sending data....\n");
-					rc = send(client_sock, buf, strlen(buf),0);
-					if(rc == -1)
-					{
-						printf("SEND ERROR\n");
-						exit(1);
-					}else{ printf("Data sent!\n"); }
+					}
 
-					printf("Waiting to recieve data...\n");
-					memset(buf, 0, sizeof(buf));
-					rc=recv(client_sock,buf,sizeof(buf),0);
-					if(rc==-1){
-						printf("RECV ERROR\n");
+					//printf("waiting to read....\n");
+					bytes_rec= recv(client_sock, buf, sizeof(buf),0);
+					if(bytes_rec == -1){
+					//	printf("RECV ERROR\n");
+						close(server_sock);
 						close(client_sock);
 						exit(1);
 					}else{
 						printf("DATA RECEIVED = %s\n",buf);
 					}
 
+					memset(buf, 0, 256);
+					strcpy(buf, "server!");
+				//	printf("(Server)Sending data...\n");
+					rc = send(client_sock, buf,strlen(buf),0);
+					if(rc == -1){
+				//		printf("SEND ERROR\n");
+						close(server_sock);
+						close(client_sock);
+						exit(1);
+					}
+					
+					close(server_sock);
 					close(client_sock);
-				//	int r = pthread_join(thread[0],(void**)&buf);
-				}
-			}
+				//thread_exit(NULL);
 
+				
+					}
+				
+			}
 			if(pid == 0){
 				if(strcmp(com->argv[0],"ls")==0)
 			 		execve("/bin/ls",argvls,env);
-			   	else if(strcmp(com->argv[0],"cat")==0)
+					else if(strcmp(com->argv[0],"cat")==0)
 			   		execve("/bin/cat",argvcat,env);
 				 else if(strcmp(com->argv[0],"vim")==0){
 				  	 execve("/usr/bin/vim",argvvim,env);
@@ -202,99 +223,73 @@ void free_commands(int n_commands, struct single_command(*commands)[512])
 }
 
 
-void *serversocket(void*arg)
+void *clientsocket(void*a)
 {
 
-	printf("pthread started\n");
 
-	int server_sock,client_sock,len,rc;
-	int bytes_rec=0;
+	int pid2 = fork();
+	if(pid2 ==0 ){
+	int client_sock, rc, len;
 	struct sockaddr_un server_sockaddr;
 	struct sockaddr_un client_sockaddr;
 	char buf[256];
-	int backlog=10;
-	memset(&server_sockaddr,0,sizeof(struct sockaddr_un));
-	memset(&client_sockaddr,0,sizeof(struct sockaddr_un));
-	memset(buf,0,256);
+	memset(&server_sockaddr, 0, sizeof(struct sockaddr_un));
+	memset(&client_sockaddr, 0, sizeof(struct sockaddr_un));
 
-	server_sock = socket(AF_UNIX, SOCK_DGRAM, 0);
-	if(server_sock == -1){
-		printf("SOCKET ERROR\n");
+	client_sock = socket(AF_UNIX, SOCK_STREAM, 0);
+	if( client_sock == -1){
+	//	printf("SOCKET ERROR");
 		exit(1);
-	}else{printf("server socket success\n");}
-
-	server_sockaddr.sun_family=AF_UNIX;
-	strcpy(server_sockaddr.sun_path, SOCK_PATH);
-	len = sizeof(server_sockaddr);
-
-	unlink(SOCK_PATH);
-	rc = bind(server_sock, (struct sockaddr*)&server_sockaddr,len);
-	if( rc == -1) {
-		printf("BIND ERROR\n");
-		exit(1);
-	}else{printf("server bind success\n");}
-
-	//d_t clientpid = fork();
-//f(clientpid == 0){
-
-	rc = listen(server_sock, backlog);
-	if( rc == -1)
-	{
-		printf("LISTEN ERROR\n");
-	//	close(server_sock);
-	//	exit(1); 
 	}
 
-	printf("socket listening....\n");
+	client_sockaddr.sun_family = AF_UNIX;
+	strcpy(client_sockaddr.sun_path, CLIENT_PATH);
+	len = sizeof(client_sockaddr);
 
-	client_sock = accept(server_sock, (struct sockaddr*)&client_sockaddr,&len);
-	if(client_sock == -1){
-		printf("ACCEPT ERROR\n");
-		close(server_sock);
-		close(client_sock);
-		exit(1);
-	}else{printf("accept success\n");}
-
-	len=sizeof(client_sockaddr);
-	rc=getpeername(client_sock, (struct sockaddr*)&client_sockaddr, &len);
+	unlink(CLIENT_PATH);
+	rc = bind(client_sock, (struct sockaddr*) &client_sockaddr,len);
 	if(rc == -1){
-		printf("GETPEERNAME ERROR\n");
-		close(server_sock);
+	//	printf("BIND ERROR\n");
 		close(client_sock);
 		exit(1);
-	}else{
-		printf("CLient socket filepath : %s\n",client_sockaddr.sun_path);
+	}
+
+	server_sockaddr.sun_family = AF_UNIX;
+	strcpy(server_sockaddr.sun_path, SERVER_PATH);
+	rc = connect(client_sock, (struct sockaddr*)&server_sockaddr,len);
+	if(rc == -1){
+	//	printf("CONNECT ERROR\n");
+		close(client_sock);
+		exit(1);
 	}
 
 
-	printf("Waiting to read...\n");
-	bytes_rec= recv(client_sock, buf, sizeof(buf),0);
-	if(bytes_rec == -1)
-	{
-		printf("RECV ERROR\n");
-		close(server_sock);
+	strcpy(buf, "client!");
+//	printf("(Client)sending data...\n");
+	rc = send(client_sock, buf, strlen(buf),0);
+	if( rc == -1){
+//		printf("SEND ERROR\n");
 		close(client_sock);
 		exit(1);
 	}else{
-		printf("DATA RECEVIED= %s\n",buf);
+//		printf("Data sent!\n");
 	}
 
-	memset(buf,0,256);
-	strcpy(buf,DATA);
-	printf("Sending data...\n");
-	rc=send(client_sock, buf, strlen(buf),0);
-	if(rc==-1)
-	{
-		printf("SEND ERROR\n");
-		close(server_sock);
+
+//	printf("(Client)waiting to recieve data..\n");
+	memset(buf, 0, sizeof(buf));
+	rc = recv(client_sock, buf, sizeof(buf),10);
+	if(rc == -1){
+//		printf("RECV ERROR\n");
 		close(client_sock);
 		exit(1);
-	}else{
-		printf("Data sent!\n");
 	}
-//}
-	close(server_sock);
 	close(client_sock);
-	
-}
 
+	memset(buf, 0, 256);
+//=0;
+} 
+
+//eturn (void*)a;
+
+}
