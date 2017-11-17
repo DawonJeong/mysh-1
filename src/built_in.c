@@ -12,6 +12,9 @@
 #include <signal.h>
 
 #include "built_in.h"
+#include "commands.h"
+
+
 
 int do_cd(int argc, char** argv) {
   if (!validate_cd_argv(argc, argv))
@@ -53,9 +56,11 @@ int do_fg(int argc, char** argv) {
 	if(setpgid(getpid(),0)!=0)
 		perror("setpgid() error");
 	else{
-		printf("%d running",getpid());
+		printf("%d running",getpgrp());
+		
 	}
   return 0;
+
 }
 
 int validate_cd_argv(int argc, char** argv) {

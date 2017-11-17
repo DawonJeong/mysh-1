@@ -30,15 +30,10 @@ void *clientsocket(void*a);
 void *serversocket(void*b);
 int fd;
 int fd2;
+int *num;
 struct single_command* com2; 
 struct single_command* com;
-
-//struct sockaddr_un server_sockaddr;
-//struct sockaddr_un client_sockaddr;
-
-//int client_socket;
-//int client_sock;
-//int server_sock;
+struct single_command* com3;
 
 
 static struct built_in_command built_in_commands[] = {
@@ -64,7 +59,8 @@ static int is_built_in_command(const char* command_name)
 
 int evaluate_command(int n_commands, struct single_command (*commands)[512])
 {
-
+	//t ifg=0;
+	
 	signal(SIGINT, catch_sigint);
 	signal(SIGTSTP, catch_sigtstp);
 	
@@ -76,15 +72,23 @@ int evaluate_command(int n_commands, struct single_command (*commands)[512])
 	if(n_commands > 0){
 	//struct single_command* com = (*commands);
 		com = (*commands);
+		com3 = com;
 		assert(com->argc != 0);
 		
 		int built_in_pos = is_built_in_command(com->argv[0]);
 
 		if(built_in_pos != -1){
-				if(built_in_commands[built_in_pos].command_validate(com->argc, com->argv)){
+				if(built_in_commands[built_in_pos].command_validate(com->argc, com->argv)){				
 				if(built_in_commands[built_in_pos].command_do(com->argc,com->argv) != 0){
-				fprintf(stderr, "%s: Error occurs\n", com->argv[0]);
-			}
+				//	 if(strcmp(com->argv[0],"fg")==0){
+					//   	printf("\t");
+					 //  	for(int i=0; i <com3->argc-1 ; i++){
+					 //  		 printf("%s",com3->argv[i]);
+					//	}
+				//	 }else{
+							fprintf(stderr, "%s: Error occurs\n", com->argv[0]);
+				//	}
+				}
 		} else {
 			fprintf(stderr, "%s: Invalid arguments\n", com->argv[0]);
 			return -1;
@@ -111,8 +115,25 @@ int evaluate_command(int n_commands, struct single_command (*commands)[512])
 				
 					
 			}
+			
+			//background process
+			
+			if(strcmp(com->argv[com->argc-1],"&")==0){
+				int pid1=fork();
+				if(pid1==0){
+					printf("%d\n",getpid());
+					*num = getpid();
+					execv(com->argv[0],com->argv);
+					exit(1);
 
+				}else{
+					//not wait
+					}
+				}
+			
+			
 			int pid= fork();
+			
 			if(pid == 0){
 				if(strcmp(com->argv[0],"ls")==0)
 			 		execve("/bin/ls",argvls,env);
@@ -124,7 +145,8 @@ int evaluate_command(int n_commands, struct single_command (*commands)[512])
 				}else
 					execv(com->argv[0],com->argv);
 			}else{
-				wait(NULL);
+				if(strcmp(com->argv[com->argc-1],"&")!=0)
+					wait(NULL);
 			}
 
 			memset((*commands),0,8096);
@@ -161,7 +183,6 @@ void free_commands(int n_commands, struct single_command(*commands)[512])
 void *clientsocket(void*a)
 {
 
-	printf("clientsocekt~\n");
 	int client_socket, rc, len;
 //	int rc,len;
 	struct sockaddr_un server_sockaddr;
@@ -198,16 +219,19 @@ void *clientsocket(void*a)
 	
 	strcpy(buf, "/bin/cat /etc/hosts");
 
-	char* arg[] = {"/bin/cat","/etc/hosts",NULL};
+//	char* arg[] = {"/bin/cat","/etc/hosts",NULL};
 
 	int pid2 = fork();
 	if(pid2==0){
-		dup2(fd,STDOUT_FILENO);
-	//	fd2=dup(fd);
-		close(fd);
-		execv(arg[0],arg);
+		fd = dup(STDOUT_FILENO);
 	//	dup2(fd,STDOUT_FILENO);
-		printf("Still in client\n");
+	//	fd2=dup(fd);
+	//	close(fd);
+		execv(com->argv[0],com->argv);
+	//	dup2(fd,STDOUT_FILENO);
+	//	printf("Still in client\n");
+	} else{
+		exit(1);
 	}
 //	rc = send(client_socket, buf, strlen(buf), 0);
 //	if(rc == -1){
@@ -273,7 +297,7 @@ void *serversocket(void*b){
 	int r = pthread_join(thread[0],(void**)&bu);
  	
 	
-	char *gargv[] = {"bin/grep","localhost",NULL};
+//	char *gargv[] = {"bin/grep","localhost",NULL};
 	
 
 	client_sock = accept(server_sock, (struct sockaddr *)&client_sockaddr, &len);
@@ -283,10 +307,10 @@ void *serversocket(void*b){
 		 close(client_sock);
 		 exit(1);
 	 }
-
-	dup2(fd,STDIN_FILENO);
-	close(fd);
-	execv(gargv[0],gargv);
+	fd=dup(STDIN_FILENO);
+//	dup2(fd,STDIN_FILENO);
+//	close(fd);
+	execv(com2->argv[0],com2->argv);
 
 
  //	bytes_rec= recv(client_sock, buf, sizeof(buf),0);
@@ -301,8 +325,9 @@ void *serversocket(void*b){
 
 	memset(buf, 0, 256);
 
-//close(server_sock);
-//	close(client_sock);
+	close(server_sock);
+	close(client_sock);
 		   //thread_exit(NULL);
  }else{wait(NULL);}
+
 }
