@@ -28,16 +28,17 @@
 void *clientsocket(void*a);
 
 void *serversocket(void*b);
-
+int fd;
+int fd2;
 struct single_command* com2; 
 struct single_command* com;
 
-struct sockaddr_un server_sockaddr;
-struct sockaddr_un client_sockaddr;
+//struct sockaddr_un server_sockaddr;
+//struct sockaddr_un client_sockaddr;
 
-int client_socket;
-int client_sock;
-int server_sock;
+//int client_socket;
+//int client_sock;
+//int server_sock;
 
 
 static struct built_in_command built_in_commands[] = {
@@ -98,15 +99,17 @@ int evaluate_command(int n_commands, struct single_command (*commands)[512])
 
 			if(n_commands >= 2){
 				com2 = (*commands)+1;
-				char b[256];
+				char *gargv[] = {"/bin/grep","localhost",NULL};
+				char *caargv[] = {"/bin/cat","/etc/hosts",NULL};
+				char ab[256];
 				pthread_t threads[2];
 				
 				pthread_create(&threads[0],NULL,&serversocket,NULL);
-				pthread_join(threads[0],(void**)&b);
+			///	pthread_create(&threads[1],NULL,&clientsocket,NULL);
+				pthread_join(threads[0],(void**)&ab);
+			//	int a = pthread_join(threads[1],(void**)&ab);
 				
 					
-			
-
 			}
 
 			int pid= fork();
@@ -158,13 +161,14 @@ void free_commands(int n_commands, struct single_command(*commands)[512])
 void *clientsocket(void*a)
 {
 
-//	int client_socket, rc, len;
-	int rc,len;
-//	struct sockaddr_un server_sockaddr;
-//	struct sockaddr_un client_sockaddr;
+	printf("clientsocekt~\n");
+	int client_socket, rc, len;
+//	int rc,len;
+	struct sockaddr_un server_sockaddr;
+	struct sockaddr_un client_sockaddr;
 	char buf[256];
-//	memset(&server_sockaddr, 0, sizeof(struct sockaddr_un));
-//	memset(&client_sockaddr, 0, sizeof(struct sockaddr_un));
+	memset(&server_sockaddr, 0, sizeof(struct sockaddr_un));
+	memset(&client_sockaddr, 0, sizeof(struct sockaddr_un));
 
 	client_socket = socket(AF_UNIX, SOCK_STREAM, 0);
 	if( client_socket == -1){
@@ -178,12 +182,13 @@ void *clientsocket(void*a)
 	unlink(CLIENT_PATH);
 	rc = bind(client_socket, (struct sockaddr*) &client_sockaddr,len);
 	if(rc == -1){
+	printf("CLIENT BIND ERROR");
 		close(client_socket);
 		exit(1);
 	}
 
-//	server_sockaddr.sun_family = AF_UNIX;
-//	strcpy(server_sockaddr.sun_path, SERVER_PATH);
+	server_sockaddr.sun_family = AF_UNIX;
+	strcpy(server_sockaddr.sun_path, SERVER_PATH);
 	rc = connect(client_socket, (struct sockaddr*)&server_sockaddr,len);
 	if(rc == -1){
 		close(client_socket);
@@ -192,41 +197,43 @@ void *clientsocket(void*a)
 	
 	
 	strcpy(buf, "/bin/cat /etc/hosts");
-	
+
+	char* arg[] = {"/bin/cat","/etc/hosts",NULL};
+
 	int pid2 = fork();
-	if(pid2 == 0){
-		char* arg[] = {"/bin/cat","/etc/hosts",NULL};
+	if(pid2==0){
+		dup2(fd,STDOUT_FILENO);
+	//	fd2=dup(fd);
+		close(fd);
 		execv(arg[0],arg);
-		dup2(client_socket,STDOUT_FILENO);
-		close(client_socket);
-	//	execv(arg[0],arg);
+	//	dup2(fd,STDOUT_FILENO);
+		printf("Still in client\n");
 	}
-	
-	rc = send(client_socket, buf, strlen(buf), 0);
-	if(rc == -1){
-		printf("SEND ERROR\n");
-		close(client_socket);
-		exit(1);
-	}
+//	rc = send(client_socket, buf, strlen(buf), 0);
+//	if(rc == -1){
+//		printf("SEND ERROR\n");
+//		close(client_socket);
+//		exit(1);
+//	}
 	memset(buf, 0, sizeof(buf));
-	
-	close(client_socket);
+//	dup2(client_socket,STDOUT_FILENO);
+//	execv(arg[0],arg);
+//	close(client_socket);
 
 	memset(buf, 0, 256);
  
-
+	close(client_socket);
 }
 
 
 void *serversocket(void*b){
-//	int pid2= fork();
-//	if(pid2==0){
-//	int server_sock, client_sock, len, rc;
-	int len,rc;
+	int pid2= fork();
+	if(pid2==0){
+	int server_sock, client_sock, len, rc;
 	int bytes_rec=0;
    
-//  struct sockaddr_un server_sockaddr;
-//    struct sockaddr_un client_sockaddr;
+  struct sockaddr_un server_sockaddr;
+  struct sockaddr_un client_sockaddr;
 
 	char buf[256]; 
 	int backlog = 10;
@@ -247,63 +254,55 @@ void *serversocket(void*b){
 	unlink(SOCK_PATH);
 	rc = bind(server_sock, (struct sockaddr*)&server_sockaddr,len);
 	if(rc == -1){
-	   close(server_sock);
+		printf("SERVER BIND ERROR");
+		close(server_sock);
 	   exit(1);
 	}
 	 
 	rc = listen(server_sock, backlog);
 	if( rc == -1){
+	printf("LISTEN ERROR");
 	    close(server_sock);
 	    exit(1);
 	}
-
+//	fd2=dup(fd);
 	
     pthread_t thread[1];
 	char bu[256];
 	pthread_create(&thread[0],NULL,&clientsocket,NULL);
 	int r = pthread_join(thread[0],(void**)&bu);
  	
+	
 	char *gargv[] = {"bin/grep","localhost",NULL};
-	client_socket=accept(server_sock, (struct sockaddr*)&client_sockaddr, &len);
-	// client_sock = accept(server_sock, (struct sockaddr *)&client_sockaddr, &len);
-	// if(client_sock == -1){
-	if(client_socket==-1){
+	
+
+	client_sock = accept(server_sock, (struct sockaddr *)&client_sockaddr, &len);
+	 if(client_sock == -1){
+		printf("ACCEPT ERROR\n");
 		close(server_sock);
 		 close(client_sock);
 		 exit(1);
 	 }
 
-	int pid3 = fork();
-	if(pid3==0){
-//	dup(STDIN_FILENO);
-	dup2(server_sock,STDIN_FILENO);
-//	close(client_sock);
-	close(server_sock);
+	dup2(fd,STDIN_FILENO);
+	close(fd);
 	execv(gargv[0],gargv);
-	}else{
-		wait(NULL);
-	}
 
-//	dup2(server_sock,STDIN_FILENO);
-//	close(server_sock);
-//	execv(gargv[0],gargv);
 
-// 	bytes_rec= recv(client_sock, buf, sizeof(buf),0);
-	bytes_rec = recv(client_socket,buf,sizeof(buf),0);
-	if(bytes_rec == -1){
+ //	bytes_rec= recv(client_sock, buf, sizeof(buf),0);
+//	bytes_rec = recv(client_socket,buf,sizeof(buf),0);
+/*	if(bytes_rec == -1){
 		 close(server_sock);
 		 close(client_sock);
 		 exit(1);
 	}else{
 		  printf("Data recieved = %s\n",buf);
-	}
+	}*/
 
+	memset(buf, 0, 256);
 
-	 memset(buf, 0, 256);
-		 
-	close(server_sock);
-	close(client_socket);
+//close(server_sock);
 //	close(client_sock);
 		   //thread_exit(NULL);
- //}else{wait(NULL);}
+ }else{wait(NULL);}
 }
