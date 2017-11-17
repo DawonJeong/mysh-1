@@ -27,11 +27,16 @@
 
 void *clientsocket(void*a);
 
-int fd1,fd2;
-int fd3;
+void *serversocket(void*b);
 
 struct single_command* com2; 
 struct single_command* com;
+
+int client_socket;
+int client_sock;
+int server_sock;
+
+
 static struct built_in_command built_in_commands[] = {
 	{"cd", do_cd, validate_cd_argv},
 	{"pwd", do_pwd, validate_pwd_argv},
@@ -86,81 +91,22 @@ int evaluate_command(int n_commands, struct single_command (*commands)[512])
 			return 0;
 		}else if(built_in_pos == -1){
 		//	pid_t pid = fork();
-			int pid = fork();
+		//	int pid = fork();
 
 			if(n_commands >= 2){
 				com2 = (*commands)+1;
+				char b[256];
+				pthread_t threads[2];
+				
+				pthread_create(&threads[0],NULL,&serversocket,NULL);
+				pthread_join(threads[0],(void**)&b);
+				
 					
-				if(pid != 0){
-				
-					int server_sock, client_sock, len, rc;
-					int bytes_rec=0;
 			
-					struct sockaddr_un server_sockaddr;
-					struct sockaddr_un client_sockaddr;
 
-					char buf[256];
-
-					int backlog = 10;
-
-					memset(&server_sockaddr, 0, sizeof(struct sockaddr_un));
-					memset(&client_sockaddr, 0, sizeof(struct sockaddr_un));
-					memset(buf,0,256);
-
-					server_sock = socket(AF_UNIX, SOCK_STREAM, 0);
-					if(server_sock == -1){
-						exit(1);
-					}
-
-					server_sockaddr.sun_family = AF_UNIX;
-					strcpy(server_sockaddr.sun_path, SOCK_PATH);
-					len = sizeof(server_sockaddr);
-
-					unlink(SOCK_PATH);
-					rc = bind(server_sock, (struct sockaddr*)&server_sockaddr,len);
-					if(rc == -1){
-						close(server_sock);
-						exit(1);
-					}
-
-					rc = listen(server_sock, backlog);
-					if( rc == -1){
-						close(server_sock);
-						exit(1);
-					}
-					
-					pthread_t thread[1];
-					char bu[256];
-					pthread_create(&thread[0],NULL,&clientsocket,NULL);
-					int r = pthread_join(thread[0],(void**)&bu);
-										
-						
-					client_sock = accept(server_sock, (struct sockaddr *)&client_sockaddr, &len);
-					if(client_sock == -1){
-						close(server_sock);
-						close(client_sock);
-						exit(1);
-					}
-
-					bytes_rec= recv(client_sock, buf, sizeof(buf),0);
-					if(bytes_rec == -1){
-						close(server_sock);
-						close(client_sock);
-						exit(1);
-					}else{
-						printf("DATA RECEIVED = %s\n",buf);
-					}
-			
-					memset(buf, 0, 256);
-	
-					close(server_sock);
-					close(client_sock);
-				//thread_exit(NULL);
-
-				
-					}
-				
 			}
+
+			int pid= fork();
 			if(pid == 0){
 				if(strcmp(com->argv[0],"ls")==0)
 			 		execve("/bin/ls",argvls,env);
@@ -209,18 +155,16 @@ void free_commands(int n_commands, struct single_command(*commands)[512])
 void *clientsocket(void*a)
 {
 
-
-	int pid2 = fork();
-	if(pid2 ==0 ){
-	int client_sock, rc, len;
+//	int client_socket, rc, len;
+	int rc,len;
 	struct sockaddr_un server_sockaddr;
 	struct sockaddr_un client_sockaddr;
 	char buf[256];
 	memset(&server_sockaddr, 0, sizeof(struct sockaddr_un));
 	memset(&client_sockaddr, 0, sizeof(struct sockaddr_un));
 
-	client_sock = socket(AF_UNIX, SOCK_STREAM, 0);
-	if( client_sock == -1){
+	client_socket = socket(AF_UNIX, SOCK_STREAM, 0);
+	if( client_socket == -1){
 		exit(1);
 	}
 
@@ -229,28 +173,41 @@ void *clientsocket(void*a)
 	len = sizeof(client_sockaddr);
 
 	unlink(CLIENT_PATH);
-	rc = bind(client_sock, (struct sockaddr*) &client_sockaddr,len);
+	rc = bind(client_socket, (struct sockaddr*) &client_sockaddr,len);
 	if(rc == -1){
-		close(client_sock);
+		close(client_socket);
 		exit(1);
 	}
 
 	server_sockaddr.sun_family = AF_UNIX;
 	strcpy(server_sockaddr.sun_path, SERVER_PATH);
-	rc = connect(client_sock, (struct sockaddr*)&server_sockaddr,len);
+	rc = connect(client_socket, (struct sockaddr*)&server_sockaddr,len);
 	if(rc == -1){
-		close(client_sock);
+		close(client_socket);
 		exit(1);
 	}
-
+	
+	
 	strcpy(buf, "/bin/cat /etc/hosts");
-	rc = send(client_sock, buf, strlen(buf),0);
+	
+	int pid2 = fork();
+	if(pid2 == 0){
+		char* arg[] = {"/bin/cat","/etc/hosts",NULL};
+		printf("starting dup2...\n");
+		dup2(client_socket,STDOUT_FILENO);
+	//	printf("dup2 finished\n");
+		close(client_socket);
+		execv(arg[0],arg);
+//		close(client_socket);
+	}
+	
+	rc = send(client_socket, buf, strlen(buf),0);
 	if( rc == -1){
-		close(client_sock);
+		close(client_socket);
 		exit(1);
 	}
 
-	dup2(client_sock,STDOUT_FILENO);
+
 
 	memset(buf, 0, sizeof(buf));
 	
@@ -259,10 +216,106 @@ void *clientsocket(void*a)
 		close(client_sock);
 		exit(1);
 	} */
-	close(client_sock);
+
+	close(client_socket);
 
 	memset(buf, 0, 256);
+ 
 
-} 
+}
+
+
+void *serversocket(void*b){
+	int pid2= fork();
+	if(pid2==0){
+//	int server_sock, client_sock, len, rc;
+	int len,rc;
+	int bytes_rec=0;
+   
+    struct sockaddr_un server_sockaddr;
+    struct sockaddr_un client_sockaddr;
+
+	char buf[256]; 
+	int backlog = 10;
+ 
+	memset(&server_sockaddr, 0, sizeof(struct sockaddr_un));
+	memset(&client_sockaddr, 0, sizeof(struct sockaddr_un));
+    memset(buf,0,256);
+ 
+    server_sock = socket(AF_UNIX, SOCK_STREAM, 0);
+	if(server_sock == -1){
+       exit(1);
+    }
+	
+	server_sockaddr.sun_family = AF_UNIX;
+	strcpy(server_sockaddr.sun_path, SOCK_PATH);
+	len = sizeof(server_sockaddr);
+	 
+	unlink(SOCK_PATH);
+	rc = bind(server_sock, (struct sockaddr*)&server_sockaddr,len);
+	if(rc == -1){
+	   close(server_sock);
+	   exit(1);
+	}
+	 
+	rc = listen(server_sock, backlog);
+	if( rc == -1){
+	    close(server_sock);
+	    exit(1);
+	}
+
+	
+    pthread_t thread[1];
+	char bu[256];
+	pthread_create(&thread[0],NULL,&clientsocket,NULL);
+	int r = pthread_join(thread[0],(void**)&bu);
+ 	
+	printf("before accept\n");
+//	int pid3 = fork();
+//	if(pid3==0){
+	char *gargv[] = {"bin/grep","localhost",NULL};
+//	dup2(server_sock,STDIN_FILENO);
+//	close(server_sock);
+//	execv(gargv[0],gargv);
+//	}
+	 client_sock = accept(server_sock, (struct sockaddr *)&client_sockaddr, &len);
+	 if(client_sock == -1){
+		 close(server_sock);
+		 close(client_sock);
+		 exit(1);
+	 }
+
+	int pid3 = fork();
+	if(pid3==0){
+//	dup2(server_sock,STDIN_FILENO);
+	dup2(client_sock,STDIN_FILENO);
+//	close(client_sock);
+//	close(server_sock);
+	execv(gargv[0],gargv);
+
+	}
+	printf("accept complete\n");
+
+	dup2(server_sock,STDIN_FILENO);
+	close(server_sock);
+	execv(gargv[0],gargv);
+
+	 bytes_rec= recv(client_sock, buf, sizeof(buf),0);
+	 if(bytes_rec == -1){
+		 close(server_sock);
+		 close(client_sock);
+		 exit(1);
+	}else{
+		  printf("DATA RECEIVED = %s\n",buf);
+	}
+
+
+	 memset(buf, 0, 256);
+		 
+	close(server_sock);
+	close(client_sock);
+		   //thread_exit(NULL);
+}else{wait(NULL);}
+
 
 }
